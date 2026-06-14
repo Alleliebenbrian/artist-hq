@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Artist HQ</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #080808; font-family: 'Inter', 'Helvetica Neue', sans-serif; color: #efefef; }
+  input[type=range] { accent-color: #C8FF00; }
+  input[type=checkbox] { accent-color: #C8FF00; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #111; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  select option { background: #191919; color: #efefef; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+// ─── Supabase Config ─────────────────────────────────────────────────────────
+// HIER deine Supabase Daten eintragen (nach Anleitung):
+const SUPABASE_URL = "https://bkenpzqbspinwuhwxeez.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJrZW5wenFic3Bpbnd1aHd4ZWV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MzcyMDEsImV4cCI6MjA5NzAxMzIwMX0.1VFtQcS8oWeYSv1wCTewHGyy_yagrFKb8yjL9l_vVWc";
+
+const supabaseReady = SUPABASE_URL !== "DEINE_SUPABASE_URL";
+const sb = supabaseReady ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+// ─── Persist helpers ─────────────────────────────────────────────────────────
+// Speichert in Supabase wenn verbunden, sonst localStorage als Fallback
+const STORAGE_KEY = "artist_hq_data";
+
+async function saveData(data) {
+  try {
+    if (sb) {
+      await sb.from("artist_hq").upsert({ id: 1, data: JSON.stringify(data) });
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+  } catch(e) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+}
+
+async function loadData() {
+  try {
+    if (sb) {
+      const { data: rows } = await sb.from("artist_hq").select("data").eq("id", 1).single();
+      if (rows?.data) return JSON.parse(rows.data);
+    }
+  } catch(e) {}
+  const local = localStorage.getItem(STORAGE_KEY);
+  return local ? JSON.parse(local) : null;
+}
+
+const { useState, useEffect } = React;
+
+const T = {
+  bg:"#080808", surf:"#111111", surf2:"#191919", surf3:"#222222",
+  border:"#272727", accent:"#C8FF00",
+  red:"#FF4444", yellow:"#FFB800", blue:"#4488FF", purple:"#AA66FF",
+  text:"#EFEFEF", muted:"#555", muted2:"#777",
+};
+
+const TABS = [
+  {id:"overview", label:"Overview", icon:"⚡"},
+  {id:"releases", label:"Releases", icon:"🎵"},
+  {id:"content",  label:"Content",  icon:"📲"},
+  {id:"events",   label:"Events",   icon:"🎤"},
+  {id:"pitching", label:"Pitching", icon:"🎯"},
+  {id:"finanzen", label:"Finanzen", icon:"💶"},
+  {id:"kontakte", label:"Kontakte", icon:"🤝"},
+  {id:"ziele",    label:"Ziele",    icon:"🏆"},
+  {id:"tasks",    label:"Tasks",    icon:"✅"},
+  {id:"docs",     label:"Dokumente",icon:"📁"},
+];
+
+const STATUS_C = {
+  released:"#C8FF00", confirmed:"#C8FF00", aktuell:"#C8FF00", aktiv:"#C8FF00",
+  "in-progress":"#FFB800", "in-talks":"#FFB800",
+  pitched:"#4488FF", submitted:"#AA66FF",
+  planned:"#555", pending:"#555", todo:"#555", kalt:"#555", done:"#555",
+};
+const PRIO_C = {high:T.red, medium:T.yellow, low:T.muted2};
+
+const INIT = {
+  artist:{name:"KÜNSTLER",genre:"Hip-Hop / R&B",label:"Independent",listeners:"12.4K",followers:"8.2K",streams:"84K"},
+  releases:[
+    {id:1,title:"MIDNIGHT RUN",type:"Single",releaseDate:"2026-07-15",status:"in-progress",budget:1200,notes:"Mix fertig, Master offen",distributor:"DistroKid"},
+    {id:2,title:"SEASON EP",type:"EP",releaseDate:"2026-09-01",status:"planned",budget:3500,notes:"5 Tracks, 3 fertig",distributor:"DistroKid"},
+    {id:3,title:"FALLEN KINGS",type:"Single",releaseDate:"2026-05-10",status:"released",budget:800,notes:"84K Streams",distributor:"DistroKid"},
+  ],
+  content:[
+    {id:1,platform:"Instagram",type:"Reel",caption:"BTS Studio Session",date:"2026-06-16",status:"todo",hook:"Noch nie gesehen wie..."},
+    {id:2,platform:"TikTok",type:"Video",caption:"MIDNIGHT RUN Teaser",date:"2026-06-18",status:"in-progress",hook:"Das Drop wird alles ändern"},
+    {id:3,platform:"YouTube",type:"Vlog",caption:"Day in the Life",date:"2026-06-22",status:"todo",hook:"24h als Künstler"},
+    {id:4,platform:"Instagram",type:"Story",caption:"Countdown Release",date:"2026-07-14",status:"planned",hook:"7 Tage noch..."},
+  ],
+  events:[
+    {id:1,name:"Showcase Berlin",venue:"Tresor",date:"2026-07-20",type:"Live",status:"confirmed",fee:800,notes:"Soundcheck 18:00"},
+    {id:2,name:"Interview JUICE Mag",venue:"Online",date:"2026-06-25",type:"Press",status:"confirmed",fee:0,notes:"Zoom 14:00"},
+    {id:3,name:"Festival Slot",venue:"TBA",date:"2026-08-10",type:"Live",status:"pending",fee:1500,notes:"Headliner, Vertrag offen"},
+  ],
+  pitching:[
+    {id:1,type:"Playlist",target:"Spotify Radar",release:"MIDNIGHT RUN",deadline:"2026-07-01",status:"submitted",notes:"Über Distrokid"},
+    {id:2,type:"Playlist",target:"Apple New Music Daily",release:"MIDNIGHT RUN",deadline:"2026-07-01",status:"pending",notes:"curator@apple.com"},
+    {id:3,type:"Brand Deal",target:"Nike x Musik",release:"-",deadline:"2026-08-01",status:"in-talks",notes:"30K Budget möglich"},
+    {id:4,type:"Sync",target:"Netflix Serie XY",release:"FALLEN KINGS",deadline:"2026-06-30",status:"pitched",notes:"Licensing Agent: Max"},
+  ],
+  finanzen:{
+    einnahmen:[
+      {id:1,quelle:"Streaming (Mai)",betrag:320,datum:"2026-05-31",kategorie:"Streams"},
+      {id:2,quelle:"Live Tresor",betrag:600,datum:"2026-03-20",kategorie:"Live"},
+      {id:3,quelle:"Sync Lizenz",betrag:1200,datum:"2026-04-15",kategorie:"Sync"},
+    ],
+    ausgaben:[
+      {id:1,posten:"Studio (MIDNIGHT RUN)",betrag:600,datum:"2026-05-10",kategorie:"Produktion"},
+      {id:2,posten:"Fotoshooting",betrag:350,datum:"2026-05-20",kategorie:"Content"},
+      {id:3,posten:"DistroKid Abo",betrag:22,datum:"2026-01-01",kategorie:"Distribution"},
+      {id:4,posten:"Facebook Ads",betrag:150,datum:"2026-06-01",kategorie:"Marketing"},
+    ],
+  },
+  kontakte:[
+    {id:1,name:"Max Müller",rolle:"Booking Agent",mail:"max@booking.de",tel:"+49 170 111",status:"aktiv",notiz:"Tresor Deal lief über ihn"},
+    {id:2,name:"Lisa Kraft",rolle:"Journalist / JUICE",mail:"lisa@juice.de",tel:"-",status:"aktiv",notiz:"Interview 25.06"},
+    {id:3,name:"DJ PHANTOM",rolle:"Producer",mail:"phantom@beats.de",tel:"+49 160 222",status:"aktiv",notiz:"MIDNIGHT RUN Beat"},
+    {id:4,name:"Sara Stein",rolle:"Playlist Curator",mail:"sara@spotify.de",tel:"-",status:"kalt",notiz:"Noch nicht angeschrieben"},
+  ],
+  ziele:[
+    {id:1,ziel:"100K Monthly Listeners",deadline:"2026-12-31",progress:12,kategorie:"Streams",priority:"high"},
+    {id:2,ziel:"25K Instagram Follower",deadline:"2026-12-31",progress:33,kategorie:"Social",priority:"medium"},
+    {id:3,ziel:"5 Major Festival Slots",deadline:"2026-12-31",progress:20,kategorie:"Live",priority:"high"},
+    {id:4,ziel:"Erster Brand Deal",deadline:"2026-09-01",progress:40,kategorie:"Business",priority:"high"},
+  ],
+  tasks:[
+    {id:1,task:"Promo-Plan MIDNIGHT RUN finalisieren",priority:"high",done:false,kategorie:"Release"},
+    {id:2,task:"EPK mit neuen Fotos updaten",priority:"medium",done:false,kategorie:"Press"},
+    {id:3,task:"Spotify for Artists verifizieren",priority:"high",done:true,kategorie:"Platform"},
+    {id:4,task:"Content-Kalender Juli befüllen",priority:"medium",done:false,kategorie:"Content"},
+    {id:5,task:"Nike Brand Deal Pitch schicken",priority:"high",done:false,kategorie:"Business"},
+  ],
+  docs:[
+    {id:1,name:"EPK 2026",typ:"PDF",datum:"2026-05-01",status:"aktuell",url:""},
+    {id:2,name:"Booking Rider",typ:"DOCX",datum:"2026-03-15",status:"aktuell",url:""},
+    {id:3,name:"Vertrag Tresor",typ:"PDF",datum:"2026-06-01",status:"aktuell",url:""},
+    {id:4,name:"Sync Lizenz Netflix",typ:"PDF",datum:"2026-04-10",status:"in-progress",url:""},
+  ],
+};
+
+const inp = {background:T.surf2,border:`1px solid ${T.border}`,color:T.text,padding:"8px 12px",borderRadius:"8px",fontSize:"13px",width:"100%",boxSizing:"border-box"};
+const Inp = (p) => <input style={inp} {...p}/>;
+const Sel = ({children,...p}) => <select style={inp} {...p}>{children}</select>;
+const Btn = ({children,color="accent",onClick,style={}}) => (
+  <button onClick={onClick} style={{
+    background:color==="accent"?T.accent:color==="red"?"#FF444422":"transparent",
+    color:color==="accent"?"#000":color==="red"?T.red:T.muted2,
+    border:color==="accent"?"none":color==="red"?`1px solid #FF444444`:`1px solid ${T.border}`,
+    padding:"8px 18px",borderRadius:"8px",cursor:"pointer",fontWeight:700,fontSize:"13px",...style
+  }}>{children}</button>
+);
+const Badge = ({v,c}) => <span style={{background:(c||T.muted)+"22",color:c||T.muted,fontSize:"11px",padding:"3px 9px",borderRadius:"4px",fontWeight:700,whiteSpace:"nowrap"}}>{v}</span>;
+const PBar = ({pct}) => (
+  <div style={{background:T.border,borderRadius:"4px",height:"5px",overflow:"hidden"}}>
+    <div style={{background:T.accent,width:`${Math.min(pct,100)}%`,height:"100%",transition:"width .4s"}}/>
+  </div>
+);
+
+const FIELDS = {
+  releases:[
+    {k:"title",label:"Titel",t:"text"},
+    {k:"type",label:"Typ",t:"sel",opts:["Single","EP","Album","Feature","Mixtape"]},
+    {k:"releaseDate",label:"Datum",t:"date"},
+    {k:"status",label:"Status",t:"sel",opts:["planned","in-progress","released"]},
+    {k:"budget",label:"Budget €",t:"number"},
+    {k:"distributor",label:"Distributor",t:"text"},
+    {k:"notes",label:"Notizen",t:"text",wide:true},
+  ],
+  content:[
+    {k:"platform",label:"Plattform",t:"sel",opts:["Instagram","TikTok","YouTube","Twitter"]},
+    {k:"type",label:"Typ",t:"sel",opts:["Reel","Post","Story","Video","Vlog","Live"]},
+    {k:"caption",label:"Caption",t:"text"},
+    {k:"date",label:"Datum",t:"date"},
+    {k:"status",label:"Status",t:"sel",opts:["todo","in-progress","planned","done"]},
+    {k:"hook",label:"Hook",t:"text",wide:true},
+  ],
+  events:[
+    {k:"name",label:"Name",t:"text"},
+    {k:"venue",label:"Venue",t:"text"},
+    {k:"date",label:"Datum",t:"date"},
+    {k:"type",label:"Typ",t:"sel",opts:["Live","Press","Promo","Meeting","Studio"]},
+    {k:"status",label:"Status",t:"sel",opts:["pending","confirmed","cancelled"]},
+    {k:"fee",label:"Fee €",t:"number"},
+    {k:"notes",label:"Notizen",t:"text",wide:true},
+  ],
+  pitching:[
+    {k:"type",label:"Typ",t:"sel",opts:["Playlist","Brand Deal","Sync","Feature","Press","Radio"]},
+    {k:"target",label:"Ziel",t:"text"},
+    {k:"release",label:"Release",t:"text"},
+    {k:"deadline",label:"Deadline",t:"date"},
+    {k:"status",label:"Status",t:"sel",opts:["pending","submitted","pitched","in-talks","confirmed","rejected"]},
+    {k:"notes",label:"Notizen",t:"text",wide:true},
+  ],
+  kontakte:[
+    {k:"name",label:"Name",t:"text"},
+    {k:"rolle",label:"Rolle",t:"text"},
+    {k:"mail",label:"E-Mail",t:"text"},
+    {k:"tel",label:"Telefon",t:"text"},
+    {k:"status",label:"Status",t:"sel",opts:["aktiv","kalt"]},
+    {k:"notiz",label:"Notizen",t:"text",wide:true},
+  ],
+  docs:[
+    {k:"name",label:"Name",t:"text"},
+    {k:"typ",label:"Typ",t:"sel",opts:["PDF","DOCX","ZIP","JPG","MP3","WAV"]},
+    {k:"datum",label:"Datum",t:"date"},
+    {k:"status",label:"Status",t:"sel",opts:["aktuell","in-progress","veraltet"]},
+    {k:"url",label:"Link / URL",t:"text",wide:true},
+  ],
+  tasks:[
+    {k:"task",label:"Task",t:"text",wide:true},
+    {k:"priority",label:"Priorität",t:"sel",opts:["high","medium","low"]},
+    {k:"kategorie",label:"Kategorie",t:"sel",opts:["Release","Content","Press","Event","Business","Platform"]},
+  ],
+  ziele:[
+    {k:"ziel",label:"Ziel",t:"text",wide:true},
+    {k:"deadline",label:"Deadline",t:"date"},
+    {k:"kategorie",label:"Kategorie",t:"sel",opts:["Streams","Social","Live","Business","Release","Personal"]},
+    {k:"priority",label:"Priorität",t:"sel",opts:["high","medium","low"]},
+    {k:"progress",label:"Progress %",t:"number"},
+  ],
+  finanzen_ein:[
+    {k:"quelle",label:"Quelle",t:"text"},
+    {k:"betrag",label:"Betrag €",t:"number"},
+    {k:"datum",label:"Datum",t:"date"},
+    {k:"kategorie",label:"Kategorie",t:"sel",opts:["Streams","Live","Sync","Brand Deal","Merch"]},
+  ],
+  finanzen_aus:[
+    {k:"posten",label:"Posten",t:"text"},
+    {k:"betrag",label:"Betrag €",t:"number"},
+    {k:"datum",label:"Datum",t:"date"},
+    {k:"kategorie",label:"Kategorie",t:"sel",opts:["Produktion","Content","Distribution","Marketing","Reise","Equipment"]},
+  ],
+};
+
+function Modal({section,item,onSave,onDelete,onClose}) {
+  const [d,setD] = useState({...item});
+  const fields = FIELDS[section]||[];
+  const set = (k,v) => setD(p=>({...p,[k]:v}));
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.surf,border:`2px solid ${T.accent}55`,borderRadius:"16px",padding:"28px",width:"540px",maxWidth:"95vw",maxHeight:"88vh",overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"22px"}}>
+          <div style={{fontSize:"16px",fontWeight:800,color:T.accent}}>✏️ Bearbeiten</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:T.muted2,fontSize:"24px",cursor:"pointer"}}>×</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px",marginBottom:"22px"}}>
+          {fields.map(f=>(
+            <div key={f.k} style={{gridColumn:f.wide?"1 / -1":"auto"}}>
+              <div style={{fontSize:"11px",color:T.muted2,marginBottom:"5px",letterSpacing:"1px",textTransform:"uppercase"}}>{f.label}</div>
+              {f.t==="sel"
+                ? <Sel value={d[f.k]??""} onChange={e=>set(f.k,e.target.value)}>{f.opts.map(o=><option key={o} value={o}>{o}</option>)}</Sel>
+                : <Inp type={f.t} value={d[f.k]??""} onChange={e=>set(f.k,f.t==="number"?Number(e.target.value):e.target.value)}/>
+              }
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between"}}>
+          <Btn color="red" onClick={()=>{onDelete(item.id);onClose();}}>🗑 Löschen</Btn>
+          <div style={{display:"flex",gap:"8px"}}>
+            <Btn color="ghost" onClick={onClose}>Abbrechen</Btn>
+            <Btn onClick={()=>{onSave(d);onClose();}}>Speichern</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddForm({section,defaults,onSave,onCancel}) {
+  const [d,setD] = useState({...defaults});
+  const fields = FIELDS[section]||[];
+  const set = (k,v) => setD(p=>({...p,[k]:v}));
+  return (
+    <div style={{background:T.surf2,border:`1px solid ${T.accent}55`,borderRadius:"12px",padding:"18px",marginBottom:"14px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"12px"}}>
+        {fields.map(f=>(
+          <div key={f.k} style={{gridColumn:f.wide?"1 / -1":"auto"}}>
+            <div style={{fontSize:"11px",color:T.muted2,marginBottom:"4px",textTransform:"uppercase"}}>{f.label}</div>
+            {f.t==="sel"
+              ? <Sel value={d[f.k]??""} onChange={e=>set(f.k,e.target.value)}>{f.opts.map(o=><option key={o} value={o}>{o}</option>)}</Sel>
+              : <Inp type={f.t} value={d[f.k]??""} onChange={e=>set(f.k,f.t==="number"?Number(e.target.value):e.target.value)}/>
+            }
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:"8px"}}>
+        <Btn onClick={()=>onSave({...d,id:Date.now()})}>Speichern</Btn>
+        <Btn color="ghost" onClick={onCancel}>Abbrechen</Btn>
+      </div>
+    </div>
+  );
+}
+
+const DEFAULTS = {
+  releases:{title:"",type:"Single",releaseDate:"",status:"planned",budget:0,notes:"",distributor:"DistroKid"},
+  content:{platform:"Instagram",type:"Reel",caption:"",date:"",status:"todo",hook:""},
+  events:{name:"",venue:"",date:"",type:"Live",status:"pending",fee:0,notes:""},
+  pitching:{type:"Playlist",target:"",release:"",deadline:"",status:"pending",notes:""},
+  kontakte:{name:"",rolle:"",mail:"",tel:"",status:"aktiv",notiz:""},
+  docs:{name:"",typ:"PDF",datum:"",status:"aktuell",url:""},
+  tasks:{task:"",priority:"medium",kategorie:"Release",done:false},
+  ziele:{ziel:"",deadline:"",kategorie:"Streams",priority:"high",progress:0},
+  finanzen_ein:{quelle:"",betrag:0,datum:"",kategorie:"Streams"},
+  finanzen_aus:{posten:"",betrag:0,datum:"",kategorie:"Produktion"},
+};
+
+const EditableCard = ({children,onEdit,style={}}) => {
+  const [hov,setHov] = useState(false);
+  const card = {background:T.surf,border:`1px solid ${T.border}`,borderRadius:"12px",padding:"20px"};
+  return (
+    <div onClick={onEdit} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{...card,cursor:"pointer",border:`1px solid ${hov?T.accent+"88":T.border}`,position:"relative",...style}}>
+      {children}
+      <div style={{position:"absolute",top:"10px",right:"12px",fontSize:"12px",color:T.muted2,opacity:hov?1:0,transition:"opacity .15s"}}>✏️ bearbeiten</div>
+    </div>
+  );
+};
+
+const EditableRow = ({children,onEdit}) => {
+  const [hov,setHov] = useState(false);
+  return (
+    <div onClick={onEdit} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{display:"flex",alignItems:"center",gap:"12px",padding:"10px 6px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:hov?T.surf2:"transparent",borderRadius:"6px",margin:"0 -6px"}}>
+      {children}
+      <span style={{fontSize:"11px",color:T.muted2,marginLeft:"auto",flexShrink:0,opacity:hov?1:0}}>✏️</span>
+    </div>
+  );
+};
+
+function App() {
+  const [data,setData] = useState(INIT);
+  const [tab,setTab]   = useState("overview");
+  const [modal,setModal] = useState(null);
+  const [adding,setAdding] = useState(null);
+  const [taskFilter,setTaskFilter] = useState("open");
+  const [editArtist,setEditArtist] = useState(false);
+  const [artistDraft,setArtistDraft] = useState(INIT.artist);
+  const [saveStatus,setSaveStatus] = useState(""); // "", "saving", "saved", "error"
+  const [dbReady,setDbReady] = useState(false);
+
+  // Load data on mount
+  useEffect(() => {
+    loadData().then(saved => {
+      if (saved) setData(saved);
+      setDbReady(true);
+    });
+  }, []);
+
+  // Auto-save whenever data changes (debounced 800ms)
+  useEffect(() => {
+    if (!dbReady) return;
+    setSaveStatus("saving");
+    const t = setTimeout(() => {
+      saveData(data)
+        .then(() => setSaveStatus("saved"))
+        .catch(() => setSaveStatus("error"));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [data, dbReady]);
+
+  const updList = (key,fn) => setData(d=>({...d,[key]:fn(d[key])}));
+  const saveItem = (section,draft) => {
+    if(section==="finanzen_ein") setData(d=>({...d,finanzen:{...d.finanzen,einnahmen:d.finanzen.einnahmen.map(x=>x.id===draft.id?draft:x)}}));
+    else if(section==="finanzen_aus") setData(d=>({...d,finanzen:{...d.finanzen,ausgaben:d.finanzen.ausgaben.map(x=>x.id===draft.id?draft:x)}}));
+    else updList(section,arr=>arr.map(x=>x.id===draft.id?draft:x));
+  };
+  const delItem = (section,id) => {
+    if(section==="finanzen_ein") setData(d=>({...d,finanzen:{...d.finanzen,einnahmen:d.finanzen.einnahmen.filter(x=>x.id!==id)}}));
+    else if(section==="finanzen_aus") setData(d=>({...d,finanzen:{...d.finanzen,ausgaben:d.finanzen.ausgaben.filter(x=>x.id!==id)}}));
+    else updList(section,arr=>arr.filter(x=>x.id!==id));
+  };
+  const addItem = (section,item) => {
+    if(section==="finanzen_ein") setData(d=>({...d,finanzen:{...d.finanzen,einnahmen:[...d.finanzen.einnahmen,item]}}));
+    else if(section==="finanzen_aus") setData(d=>({...d,finanzen:{...d.finanzen,ausgaben:[...d.finanzen.ausgaben,item]}}));
+    else updList(section,arr=>[...arr,item]);
+    setAdding(null);
+  };
+  const toggleTask = id => updList("tasks",arr=>arr.map(t=>t.id===id?{...t,done:!t.done}:t));
+  const setZP = (id,v) => updList("ziele",arr=>arr.map(z=>z.id===id?{...z,progress:Number(v)}:z));
+  const openModal = (section,item) => setModal({section,item});
+
+  const totalEin = data.finanzen.einnahmen.reduce((s,e)=>s+e.betrag,0);
+  const totalAus = data.finanzen.ausgaben.reduce((s,e)=>s+e.betrag,0);
+  const eventFees = data.events.filter(e=>e.fee>0 && e.status!=="cancelled");
+  const eventFeesConfirmed = eventFees.filter(e=>e.status==="confirmed").reduce((s,e)=>s+Number(e.fee),0);
+  const eventFeesPending   = eventFees.filter(e=>e.status!=="confirmed").reduce((s,e)=>s+Number(e.fee),0);
+  const releaseBudgets = data.releases.filter(r=>r.status!=="released" && r.budget>0);
+  const budgetBlocked  = releaseBudgets.reduce((s,r)=>s+Number(r.budget),0);
+
+  const card = {background:T.surf,border:`1px solid ${T.border}`,borderRadius:"12px",padding:"20px"};
+  const g2 = {display:"grid",gridTemplateColumns:"1fr 1fr",gap:"16px"};
+  const g3 = {display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"16px"};
+  const g4 = {display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"14px"};
+  const secTitle = {fontSize:"11px",letterSpacing:"3px",color:T.muted2,textTransform:"uppercase",fontWeight:700,marginBottom:"14px"};
+  const rowDiv = {display:"flex",alignItems:"center",gap:"12px",padding:"10px 0",borderBottom:`1px solid ${T.border}`};
+
+  const SectionHeader = ({title,section}) => (
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"18px"}}>
+      <h2 style={{margin:0,fontSize:"18px",fontWeight:900}}>{title}</h2>
+      <Btn onClick={()=>setAdding(section)}>+ Hinzufügen</Btn>
+    </div>
+  );
+  const FilterBtns = ({value,onChange}) => (
+    <div style={{display:"flex",gap:"5px"}}>
+      {[["open","Offen"],["done","Erledigt"],["all","Alle"]].map(([v,l])=>(
+        <button key={v} onClick={()=>onChange(v)} style={{background:value===v?T.accent:"transparent",color:value===v?"#000":T.muted2,border:`1px solid ${value===v?T.accent:T.border}`,padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontSize:"11px",fontWeight:700}}>{l}</button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{background:T.bg,minHeight:"100vh"}}>
+      {modal && <Modal section={modal.section} item={modal.item} onSave={d=>saveItem(modal.section,d)} onDelete={id=>delItem(modal.section,id)} onClose={()=>setModal(null)}/>}
+
+      {/* Header */}
+      <div style={{background:T.surf,borderBottom:`1px solid ${T.border}`,padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+            <div style={{fontSize:"10px",letterSpacing:"4px",color:T.accent,fontWeight:700}}>ARTIST HQ</div>
+            {saveStatus==="saving" && <span style={{fontSize:"10px",color:T.muted2}}>⏳ speichert...</span>}
+            {saveStatus==="saved"  && <span style={{fontSize:"10px",color:"#88CC00"}}>✓ gespeichert{supabaseReady?" in Supabase":" (lokal)"}</span>}
+            {saveStatus==="error"  && <span style={{fontSize:"10px",color:T.red}}>⚠ Fehler beim Speichern</span>}
+            {!supabaseReady && dbReady && <span style={{fontSize:"10px",background:"#FFB80022",color:T.yellow,padding:"2px 8px",borderRadius:"4px"}}>⚠ Supabase nicht verbunden – Daten nur lokal</span>}
+          </div>
+          {editArtist?(
+            <div style={{display:"flex",gap:"8px",marginTop:"6px",flexWrap:"wrap"}}>
+              {[["name","Name"],["genre","Genre"],["label","Label"],["listeners","Listeners"],["followers","Follower"],["streams","Streams"]].map(([k,ph])=>(
+                <Inp key={k} style={{width:"110px"}} placeholder={ph} value={artistDraft[k]} onChange={e=>setArtistDraft(d=>({...d,[k]:e.target.value}))}/>
+              ))}
+              <Btn onClick={()=>{setData(d=>({...d,artist:artistDraft}));setEditArtist(false);}}>Save</Btn>
+              <Btn color="ghost" onClick={()=>setEditArtist(false)}>✕</Btn>
+            </div>
+          ):(
+            <>
+              <div style={{fontSize:"22px",fontWeight:900,letterSpacing:"-1px"}}>{data.artist.name}</div>
+              <div style={{fontSize:"12px",color:T.muted2,marginTop:"2px"}}>{data.artist.genre} · {data.artist.label}</div>
+            </>
+          )}
+        </div>
+        <div style={{display:"flex",gap:"24px",alignItems:"center"}}>
+          {[["Streams","streams"],["Listeners","listeners"],["Follower","followers"]].map(([l,k])=>(
+            <div key={k} style={{textAlign:"center"}}>
+              <div style={{fontSize:"11px",color:T.muted2}}>{l}</div>
+              <div style={{fontSize:"18px",fontWeight:800,color:T.accent}}>{data.artist[k]}</div>
+            </div>
+          ))}
+          {!editArtist&&<Btn color="ghost" onClick={()=>{setArtistDraft(data.artist);setEditArtist(true);}} style={{fontSize:"12px",padding:"6px 12px"}}>✏️ Edit</Btn>}
+        </div>
+      </div>
+
+      {/* Nav */}
+      <div style={{background:T.surf,borderBottom:`1px solid ${T.border}`,padding:"0 20px",display:"flex",overflowX:"auto"}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"13px 15px",fontSize:"12px",fontWeight:tab===t.id?700:400,color:tab===t.id?T.accent:T.muted2,background:"none",border:"none",borderBottom:`2px solid ${tab===t.id?T.accent:"transparent"}`,cursor:"pointer",whiteSpace:"nowrap"}}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{padding:"22px 24px",maxWidth:"1280px",margin:"0 auto"}}>
+
+        {/* OVERVIEW */}
+        {tab==="overview"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+            <div style={g4}>
+              {[{l:"Offene Tasks",v:data.tasks.filter(t=>!t.done).length},{l:"Netto",v:`€${totalEin-totalAus}`},{l:"Aktive Releases",v:data.releases.filter(r=>r.status!=="released").length},{l:"Events",v:data.events.length}].map(x=>(
+                <div key={x.l} style={card}><div style={{fontSize:"11px",color:T.muted2,marginBottom:"6px"}}>{x.l}</div><div style={{fontSize:"30px",fontWeight:900,color:T.accent,letterSpacing:"-1px"}}>{x.v}</div></div>
+              ))}
+            </div>
+            <div style={g2}>
+              <div style={card}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
+                  <div style={secTitle}>🔥 Tasks</div>
+                  <FilterBtns value={taskFilter} onChange={setTaskFilter}/>
+                </div>
+                {data.tasks.filter(t=>taskFilter==="open"?!t.done:taskFilter==="done"?t.done:true).map(t=>(
+                  <div key={t.id} style={rowDiv}>
+                    <input type="checkbox" checked={t.done} onChange={()=>toggleTask(t.id)} style={{width:"16px",height:"16px",cursor:"pointer",flexShrink:0}}/>
+                    <div style={{flex:1,fontSize:"13px",textDecoration:t.done?"line-through":"none",color:t.done?T.muted:T.text}}>{t.task}</div>
+                    <Badge v={t.priority} c={PRIO_C[t.priority]}/>
+                  </div>
+                ))}
+              </div>
+              <div style={card}>
+                <div style={secTitle}>📅 Nächste Events</div>
+                {data.events.sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,5).map(e=>(
+                  <EditableRow key={e.id} onEdit={()=>openModal("events",e)}>
+                    <div style={{flex:1}}><div style={{fontSize:"13px",fontWeight:600}}>{e.name}</div><div style={{fontSize:"11px",color:T.muted2}}>{e.venue} · {e.date}</div></div>
+                    <Badge v={e.status} c={STATUS_C[e.status]}/>
+                  </EditableRow>
+                ))}
+              </div>
+            </div>
+            <div style={g2}>
+              <div style={card}>
+                <div style={secTitle}>🎯 Pitching</div>
+                {data.pitching.slice(0,4).map(p=>(
+                  <EditableRow key={p.id} onEdit={()=>openModal("pitching",p)}>
+                    <div style={{flex:1}}><div style={{fontSize:"13px",fontWeight:600}}>{p.target}</div><div style={{fontSize:"11px",color:T.muted2}}>{p.type} · {p.release}</div></div>
+                    <Badge v={p.status} c={STATUS_C[p.status]}/>
+                  </EditableRow>
+                ))}
+              </div>
+              <div style={card}>
+                <div style={secTitle}>🏆 Ziele</div>
+                {data.ziele.filter(z=>z.priority==="high").map(z=>(
+                  <div key={z.id} style={{marginBottom:"14px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
+                      <span style={{fontSize:"13px",fontWeight:600}}>{z.ziel}</span>
+                      <span style={{fontSize:"13px",color:T.accent,fontWeight:700}}>{z.progress}%</span>
+                    </div>
+                    <PBar pct={z.progress}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={card}>
+              <div style={secTitle}>💶 Finanzen</div>
+              <div style={g3}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"14px"}}>
+                  {[
+                    {l:"Einnahmen (real)",v:totalEin,c:T.accent},
+                    {l:"Erwartet (bestätigt)",v:eventFeesConfirmed,c:"#88CC00"},
+                    {l:"Erwartet (ausstehend)",v:eventFeesPending,c:T.yellow},
+                    {l:"Ausgaben (real)",v:totalAus,c:T.red},
+                    {l:"Budget geblockt",v:budgetBlocked,c:"#FF884422".slice(0,-2)},
+                  ].map(x=>(
+                    <div key={x.l}><div style={{fontSize:"10px",color:T.muted2,marginBottom:"4px"}}>{x.l}</div><div style={{fontSize:"20px",fontWeight:900,color:x.c}}>€{x.v}</div></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* RELEASES */}
+        {tab==="releases"&&(
+          <div>
+            <SectionHeader title="Release Plan" section="releases"/>
+            {adding==="releases"&&<AddForm section="releases" defaults={DEFAULTS.releases} onSave={item=>addItem("releases",item)} onCancel={()=>setAdding(null)}/>}
+            <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+              {data.releases.map(r=>(
+                <EditableCard key={r.id} onEdit={()=>openModal("releases",r)}>
+                  <div style={{display:"flex",alignItems:"center",gap:"16px",paddingRight:"80px"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:"17px",fontWeight:900}}>{r.title}</div>
+                      <div style={{fontSize:"12px",color:T.muted2,marginTop:"3px"}}>{r.type} · {r.releaseDate} · {r.distributor}</div>
+                      <div style={{fontSize:"13px",color:T.muted2,marginTop:"4px"}}>{r.notes}</div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <Badge v={r.status} c={STATUS_C[r.status]}/>
+                      <div style={{fontSize:"14px",color:T.accent,fontWeight:700,marginTop:"6px"}}>€{r.budget}</div>
+                    </div>
+                  </div>
+                </EditableCard>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CONTENT */}
+        {tab==="content"&&(
+          <div>
+            <SectionHeader title="Content Kalender" section="content"/>
+            {adding==="content"&&<AddForm section="content" defaults={DEFAULTS.content} onSave={item=>addItem("content",item)} onCancel={()=>setAdding(null)}/>}
+            <div style={g2}>
+              {data.content.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(c=>(
+                <EditableCard key={c.id} onEdit={()=>openModal("content",c)}>
+                  <div style={{paddingRight:"80px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
+                      <span style={{fontSize:"12px",fontWeight:700,color:T.accent}}>{c.platform} · {c.type}</span>
+                      <Badge v={c.status} c={STATUS_C[c.status]}/>
+                    </div>
+                    <div style={{fontSize:"15px",fontWeight:700}}>{c.caption}</div>
+                    {c.hook&&<div style={{fontSize:"12px",color:T.muted2,marginTop:"6px",fontStyle:"italic"}}>"{c.hook}"</div>}
+                    <div style={{fontSize:"12px",color:T.muted2,marginTop:"8px"}}>📅 {c.date}</div>
+                  </div>
+                </EditableCard>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* EVENTS */}
+        {tab==="events"&&(
+          <div>
+            <SectionHeader title="Events & Bookings" section="events"/>
+            {adding==="events"&&<AddForm section="events" defaults={DEFAULTS.events} onSave={item=>addItem("events",item)} onCancel={()=>setAdding(null)}/>}
+            <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+              {data.events.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(e=>(
+                <EditableCard key={e.id} onEdit={()=>openModal("events",e)} style={{display:"flex",gap:"16px",alignItems:"center"}}>
+                  <div style={{minWidth:"52px",textAlign:"center",background:T.surf2,borderRadius:"8px",padding:"8px",flexShrink:0}}>
+                    <div style={{fontSize:"22px",fontWeight:900,color:T.accent,lineHeight:1}}>{new Date(e.date).getDate()}</div>
+                    <div style={{fontSize:"10px",color:T.muted2}}>{new Date(e.date).toLocaleString("de-DE",{month:"short"})}</div>
+                  </div>
+                  <div style={{flex:1,paddingRight:"80px"}}>
+                    <div style={{fontSize:"15px",fontWeight:700}}>{e.name}</div>
+                    <div style={{fontSize:"12px",color:T.muted2}}>{e.venue} · {e.type}</div>
+                    {e.notes&&<div style={{fontSize:"12px",color:T.muted2,marginTop:"3px"}}>{e.notes}</div>}
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <Badge v={e.status} c={STATUS_C[e.status]}/>
+                    {e.fee>0&&<div style={{fontSize:"13px",color:T.accent,fontWeight:700,marginTop:"6px"}}>€{e.fee}</div>}
+                  </div>
+                </EditableCard>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PITCHING */}
+        {tab==="pitching"&&(
+          <div>
+            <SectionHeader title="Pitching & Opportunities" section="pitching"/>
+            {adding==="pitching"&&<AddForm section="pitching" defaults={DEFAULTS.pitching} onSave={item=>addItem("pitching",item)} onCancel={()=>setAdding(null)}/>}
+            <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+              {data.pitching.map(p=>(
+                <EditableCard key={p.id} onEdit={()=>openModal("pitching",p)} style={{display:"flex",gap:"14px",alignItems:"center"}}>
+                  <Badge v={p.type} c={T.purple}/>
+                  <div style={{flex:1,paddingRight:"80px"}}>
+                    <div style={{fontSize:"15px",fontWeight:700}}>{p.target}</div>
+                    <div style={{fontSize:"12px",color:T.muted2}}>{p.release} · Deadline: {p.deadline||"–"}</div>
+                    {p.notes&&<div style={{fontSize:"12px",color:T.muted2,marginTop:"3px"}}>{p.notes}</div>}
+                  </div>
+                  <Badge v={p.status} c={STATUS_C[p.status]}/>
+                </EditableCard>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* FINANZEN */}
+        {tab==="finanzen"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+            <div style={g3}>
+              {[
+                {l:"Einnahmen real",v:totalEin,c:T.accent},
+                {l:"Ausgaben real",v:totalAus,c:T.red},
+                {l:"Netto real",v:totalEin-totalAus,c:totalEin-totalAus>=0?T.accent:T.red},
+              ].map(x=>(
+                <div key={x.l} style={card}><div style={{fontSize:"11px",color:T.muted2}}>{x.l}</div><div style={{fontSize:"28px",fontWeight:900,color:x.c}}>€{x.v}</div></div>
+              ))}
+              <div style={{...card,border:`1px solid ${T.yellow}44`,gridColumn:"1/-1"}}>
+                <div style={{fontSize:"11px",color:T.muted2,marginBottom:"14px",letterSpacing:"2px",textTransform:"uppercase"}}>📊 Geplante Cashflows</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"16px"}}>
+                  <div><div style={{fontSize:"11px",color:T.muted2}}>🎤 Event-Gagen (bestätigt)</div><div style={{fontSize:"22px",fontWeight:800,color:"#88CC00"}}>+€{eventFeesConfirmed}</div></div>
+                  <div><div style={{fontSize:"11px",color:T.muted2}}>⏳ Event-Gagen (ausstehend)</div><div style={{fontSize:"22px",fontWeight:800,color:T.yellow}}>+€{eventFeesPending}</div></div>
+                  <div><div style={{fontSize:"11px",color:T.muted2}}>🎵 Release-Budgets (geblockt)</div><div style={{fontSize:"22px",fontWeight:800,color:T.red}}>-€{budgetBlocked}</div></div>
+                  <div><div style={{fontSize:"11px",color:T.muted2}}>🔮 Forecast (bestätigt)</div><div style={{fontSize:"22px",fontWeight:800,color:totalEin+eventFeesConfirmed-totalAus-budgetBlocked>=0?T.accent:T.red}}>€{totalEin+eventFeesConfirmed-totalAus-budgetBlocked}</div></div>
+                </div>
+                <div style={{marginTop:"14px",display:"flex",flexDirection:"column",gap:"6px"}}>
+                  {eventFees.map(e=>(
+                    <div key={e.id} style={{display:"flex",alignItems:"center",gap:"10px",fontSize:"12px",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
+                      <span style={{color:T.muted2}}>🎤</span>
+                      <span style={{flex:1,fontWeight:600}}>{e.name}</span>
+                      <span style={{color:T.muted2}}>{e.date}</span>
+                      <span style={{background:(e.status==="confirmed"?"#88CC00":T.yellow)+"22",color:e.status==="confirmed"?"#88CC00":T.yellow,fontSize:"10px",padding:"2px 7px",borderRadius:"4px",fontWeight:700}}>{e.status}</span>
+                      <span style={{fontWeight:700,color:e.status==="confirmed"?"#88CC00":T.yellow}}>+€{e.fee}</span>
+                    </div>
+                  ))}
+                  {releaseBudgets.map(r=>(
+                    <div key={r.id} style={{display:"flex",alignItems:"center",gap:"10px",fontSize:"12px",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
+                      <span style={{color:T.muted2}}>🎵</span>
+                      <span style={{flex:1,fontWeight:600}}>{r.title}</span>
+                      <span style={{color:T.muted2}}>{r.releaseDate}</span>
+                      <span style={{background:T.yellow+"22",color:T.yellow,fontSize:"10px",padding:"2px 7px",borderRadius:"4px",fontWeight:700}}>budget geblockt</span>
+                      <span style={{fontWeight:700,color:T.red}}>-€{r.budget}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={g2}>
+              <div style={card}>
+                <div style={secTitle}>💰 Einnahmen</div>
+                {data.finanzen.einnahmen.map(e=>(
+                  <EditableRow key={e.id} onEdit={()=>openModal("finanzen_ein",e)}>
+                    <div style={{flex:1}}><div style={{fontSize:"13px",fontWeight:600}}>{e.quelle}</div><div style={{fontSize:"11px",color:T.muted2}}>{e.datum} · {e.kategorie}</div></div>
+                    <div style={{fontSize:"15px",fontWeight:700,color:T.accent,flexShrink:0}}>+€{e.betrag}</div>
+                  </EditableRow>
+                ))}
+                {adding==="finanzen_ein"&&<AddForm section="finanzen_ein" defaults={DEFAULTS.finanzen_ein} onSave={item=>addItem("finanzen_ein",item)} onCancel={()=>setAdding(null)}/>}
+                <Btn onClick={()=>setAdding("finanzen_ein")} style={{marginTop:"12px"}}>+ Einnahme</Btn>
+              </div>
+              <div style={card}>
+                <div style={secTitle}>💸 Ausgaben</div>
+                {data.finanzen.ausgaben.map(a=>(
+                  <EditableRow key={a.id} onEdit={()=>openModal("finanzen_aus",a)}>
+                    <div style={{flex:1}}><div style={{fontSize:"13px",fontWeight:600}}>{a.posten}</div><div style={{fontSize:"11px",color:T.muted2}}>{a.datum} · {a.kategorie}</div></div>
+                    <div style={{fontSize:"15px",fontWeight:700,color:T.red,flexShrink:0}}>-€{a.betrag}</div>
+                  </EditableRow>
+                ))}
+                {adding==="finanzen_aus"&&<AddForm section="finanzen_aus" defaults={DEFAULTS.finanzen_aus} onSave={item=>addItem("finanzen_aus",item)} onCancel={()=>setAdding(null)}/>}
+                <Btn onClick={()=>setAdding("finanzen_aus")} style={{marginTop:"12px"}}>+ Ausgabe</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* KONTAKTE */}
+        {tab==="kontakte"&&(
+          <div>
+            <SectionHeader title="Kontakte & Netzwerk" section="kontakte"/>
+            {adding==="kontakte"&&<AddForm section="kontakte" defaults={DEFAULTS.kontakte} onSave={item=>addItem("kontakte",item)} onCancel={()=>setAdding(null)}/>}
+            <div style={g2}>
+              {data.kontakte.map(k=>(
+                <EditableCard key={k.id} onEdit={()=>openModal("kontakte",k)}>
+                  <div style={{paddingRight:"80px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                      <div><div style={{fontSize:"15px",fontWeight:700}}>{k.name}</div><div style={{fontSize:"12px",color:T.accent,marginTop:"2px"}}>{k.rolle}</div></div>
+                      <Badge v={k.status} c={STATUS_C[k.status]}/>
+                    </div>
+                    <div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"3px"}}>
+                      {k.mail&&k.mail!=="-"&&<div style={{fontSize:"12px",color:T.muted2}}>✉️ {k.mail}</div>}
+                      {k.tel&&k.tel!=="-"&&<div style={{fontSize:"12px",color:T.muted2}}>📞 {k.tel}</div>}
+                      {k.notiz&&<div style={{fontSize:"12px",color:T.muted2,marginTop:"4px"}}>💬 {k.notiz}</div>}
+                    </div>
+                  </div>
+                </EditableCard>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ZIELE */}
+        {tab==="ziele"&&(
+          <div>
+            <SectionHeader title="Ziele & Vision" section="ziele"/>
+            {adding==="ziele"&&<AddForm section="ziele" defaults={DEFAULTS.ziele} onSave={item=>addItem("ziele",item)} onCancel={()=>setAdding(null)}/>}
+            <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+              {data.ziele.map(z=>(
+                <div key={z.id} style={card}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:"16px",fontWeight:800}}>{z.ziel}</div>
+                      <div style={{display:"flex",gap:"8px",marginTop:"5px"}}>
+                        <Badge v={z.kategorie} c={T.blue}/>
+                        <Badge v={z.priority} c={PRIO_C[z.priority]}/>
+                        <span style={{fontSize:"12px",color:T.muted2}}>bis {z.deadline}</span>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                      <span style={{fontSize:"28px",fontWeight:900,color:T.accent}}>{z.progress}%</span>
+                      <Btn color="ghost" onClick={()=>openModal("ziele",z)} style={{padding:"5px 10px",fontSize:"13px"}}>✏️</Btn>
+                    </div>
+                  </div>
+                  <PBar pct={z.progress}/>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"10px"}}>
+                    <span style={{fontSize:"11px",color:T.muted2}}>Progress:</span>
+                    <input type="range" min="0" max="100" value={z.progress} onChange={e=>setZP(z.id,e.target.value)} style={{flex:1}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TASKS */}
+        {tab==="tasks"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"18px"}}>
+              <div>
+                <h2 style={{margin:0,fontSize:"18px",fontWeight:900}}>Task Board</h2>
+                <div style={{fontSize:"12px",color:T.muted2,marginTop:"3px"}}>{data.tasks.filter(t=>t.done).length}/{data.tasks.length} erledigt</div>
+              </div>
+              <div style={{display:"flex",gap:"8px"}}>
+                <FilterBtns value={taskFilter} onChange={setTaskFilter}/>
+                <Btn onClick={()=>setAdding("tasks")}>+ Add Task</Btn>
+              </div>
+            </div>
+            {adding==="tasks"&&<AddForm section="tasks" defaults={DEFAULTS.tasks} onSave={item=>addItem("tasks",item)} onCancel={()=>setAdding(null)}/>}
+            <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+              {data.tasks.filter(t=>taskFilter==="open"?!t.done:taskFilter==="done"?t.done:true).map(t=>(
+                <div key={t.id} style={{...card,display:"flex",alignItems:"center",gap:"14px",padding:"14px 20px",opacity:t.done?.6:1}}>
+                  <input type="checkbox" checked={t.done} onChange={()=>toggleTask(t.id)} style={{width:"18px",height:"18px",cursor:"pointer",flexShrink:0}}/>
+                  <div style={{flex:1,fontSize:"14px",textDecoration:t.done?"line-through":"none",color:t.done?T.muted:T.text}}>{t.task}</div>
+                  <Badge v={t.kategorie} c={T.blue}/>
+                  <Badge v={t.priority} c={PRIO_C[t.priority]}/>
+                  <button onClick={()=>openModal("tasks",t)} style={{background:"none",border:"none",color:T.muted2,cursor:"pointer",fontSize:"16px",padding:"4px"}}>✏️</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* DOCS */}
+        {tab==="docs"&&(
+          <div>
+            <SectionHeader title="Dokumente & Dateien" section="docs"/>
+            {adding==="docs"&&<AddForm section="docs" defaults={DEFAULTS.docs} onSave={item=>addItem("docs",item)} onCancel={()=>setAdding(null)}/>}
+            <div style={g2}>
+              {data.docs.map(d=>(
+                <EditableCard key={d.id} onEdit={()=>openModal("docs",d)} style={{display:"flex",alignItems:"center",gap:"16px"}}>
+                  <div style={{background:T.surf3,borderRadius:"8px",padding:"10px 14px",fontSize:"12px",fontWeight:700,color:T.accent,minWidth:"48px",textAlign:"center",flexShrink:0}}>{d.typ}</div>
+                  <div style={{flex:1,paddingRight:"60px"}}>
+                    <div style={{fontSize:"14px",fontWeight:700}}>{d.name}</div>
+                    <div style={{fontSize:"12px",color:T.muted2,marginTop:"3px"}}>{d.datum}</div>
+                    {d.url&&<div style={{fontSize:"11px",color:T.blue,marginTop:"2px",wordBreak:"break-all"}}>{d.url}</div>}
+                  </div>
+                  <Badge v={d.status} c={STATUS_C[d.status]}/>
+                </EditableCard>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
